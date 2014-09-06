@@ -1,0 +1,243 @@
+---
+title: "Análisis exploratorio de árboles"
+output: html_document
+---
+
+En este reporte hacemos una descripción de los datos de un censo de árboles en 
+conglomerados de Aguascalientes, Colima, Nayarit y Jalisco.
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+source("~/Dropbox/curso_ITAM/computo/codigo/tema_ggplot.R")
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(rgdal)
+library(maptools)
+library(Hmisc)
+```
+
+### Descripción y limpieza de datos
+Contamos con 4 bases de datos, las mediciones a nivel árbol están en la base de 
+datos **arbolado**, las 
+bases restantes cuentan con información de los conglomerados:
+
+```{r}
+arbolado <- tbl_df(read.csv("datos/arbolado.csv"))
+conglomerado_bq <- tbl_df(read.csv("datos/conglomerado_bq.csv"))
+conglomerado <- tbl_df(read.csv("datos/conglomerados.csv"))
+selva <- tbl_df(read.csv("datos/selva.csv"))
+
+arbolado
+conglomerado_bq
+```
+
+```{r, echo=FALSE, message=FALSE, warnings=FALSE}
+edo_shp <- readOGR("datos/estados", layer = "Mex_Edos")
+edo_shp@data$id <- rownames(edo_shp@data)
+edo_df <- edo_shp %>%
+  subset(id %in% c(0, 7, 13, 17)) %>%  # extraemos Ags, Colima, Jalisco y Nayarit
+  fortify(region = "id") %>%
+  mutate(id = as.numeric(id)) # hacemos el id numérica
+```
+
+Veamos cómo se distribuyen los conglomerados de acuerdo al tipo de vegetación 
+primaria,
+
+```{r}
+bases <- list(conglomerado, conglomerado_bq, selva)
+names(bases) <- c("bpq_bqp", "bq", "selva")
+congs <- ldply(bases, rbind)
+rm(conglomerado, conglomerado_bq, selva)
+
+ggplot(data = congs) + 
+  geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
+               aes(x = long, y = lat, group = group)) + 
+  geom_point(aes(x = X, y = Y, color = Veg_prim_levantada, 
+                 size = Arboles_x_cgl), alpha = 0.7) +
+  # facet_wrap(~.id) +
+  coord_fixed() +
+  xlim(-106, -101.5) +
+  ylim(18.6, 23.2) +
+  labs(title = "Vegetación primaria levantada", color = "Tipo", 
+       size = "# árboles")
+```
+
+Antes de proseguir realizamos algunas recodificaciones:
+
+```{r}
+arbolado_tidy <- arbolado %>%
+  mutate(diametro_normal = mapvalues(DiametroNormal, 999, NA),
+         diametro_copa = mapvalues(DiametroCopa, -9999, NA), 
+         altura_comercial = mapvalues(AlturaComercial, -9999, NA))
+
+ggplot(arbolado_tidy, aes(x = AlturaTotal, y = altura_comercial)) +
+  geom_abline(color = "red", alpha = 0.9) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Validación de variables de altura", 
+       x = "Altura total", y = "Altura comercial")
+
+ggplot(arbolado_tidy, aes(x = AlturaTotal, y = AlturaFusteLimpio)) +
+  geom_abline(color = "red", alpha = 0.9) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Validación de variables de altura", 
+       x = "Altura total", y = "Altura fuste limpio")
+```
+
+Suponemos que la altura comercial no puede ser mayor que la altura total, con el
+criterio de mantener la altura total. Lo mismo para altura fuste limpio.
+
+```{r}
+# altura comercial
+cambiar <- arbolado_tidy$altura_comercial > arbolado_tidy$AlturaTotal
+cambiar[is.na(cambiar)] <- FALSE
+arbolado_tidy$altura_comercial[cambiar] <- arbolado_tidy$AlturaTotal[cambiar]
+
+# quitar valor atípico
+arbolado_tidy$AlturaTotal[arbolado_tidy$AlturaTotal > 75] <- NA
+
+# altura fuste limpio
+cambiar <- arbolado_tidy$AlturaFusteLimpio > arbolado_tidy$AlturaTotal
+cambiar[is.na(cambiar)] <- FALSE
+arbolado_tidy$AlturaFusteLimpio[cambiar] <- arbolado_tidy$AlturaTotal[cambiar]
+```
+
+***
+### Análisis exploratorio
+
+Veamos algunos resúmenes de la base de datos de arbolado. 
+
+```{r}
+arbolado_resumen <- arbolado_tidy %>%
+  group_by(IdConglomerado) %>%
+  summarise(num_arboles = n(), 
+            altitud = mean(Altitud),
+            altura_media = mean(AlturaTotal),
+            altura_sd = sd(AlturaTotal),
+            altura_05 = quantile(AlturaTotal, 0.05, na.rm = TRUE),
+            altura_95 = quantile(AlturaTotal, 0.95, na.rm = TRUE),
+            diametro_media = mean(diametro_normal, na.rm = TRUE),
+            diametro_sd = sd(diametro_normal, na.rm = TRUE), 
+            diametro_05 = quantile(diametro_normal, 0.05, na.rm = TRUE),
+            diametro_95 = quantile(diametro_normal, 0.95, na.rm = TRUE),
+            vegetacion_1 = unique(Veg_prim_levantada)) %>%
+  mutate(altura_cat = cut2(altura_media, g = 6),
+         diametro_cat = cut2(diametro_media, g = 6)) %>%
+  arrange(desc(num_arboles))
+
+arbolado_resumen
+
+arbolado_congs <- join(arbolado_resumen, congs[, c("IdConglomerado", "X", "Y", 
+                                                   "con_Incendios")])
+
+ggplot(arbolado_congs) + 
+  geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
+               aes(x = long, y = lat, group = group)) + 
+  geom_point(aes(x = X, y = Y,color = altura_cat, size = num_arboles),
+             alpha = 0.8) +
+  scale_color_brewer(palette = "YlOrRd") +
+  coord_fixed() +
+  xlim(-106, -101.5) +
+  ylim(18.6, 23.2) +
+  labs(title = "Altura Total (media en conglomerado)", color = "altura", 
+       size = "# árboles")
+
+```
+
+A continuación graficamos las medias de la variable *altura total* por 
+conglomerado, y los intervalos correspondientes a los cuantiles 5% a 90%. 
+Vale la pena notar que la longitud de los intervalos no se debe a tamaño de 
+muestra sino que nos habla de _variabilidad_ en las alturas dentro de un 
+conglomerado. Más aún, los lugares con mayor variabilidad corresponden a los 
+lugares donde la media es mayor, esto es natural pues no hay lugares que 
+tengan únicamente árboles muy altos pero si hay lugares con pocos árboles
+altos.
+
+```{r, fig.width=8}
+arbolado_congs <- arbolado_congs %>%
+  mutate(num_cat = cut2(num_arboles, g = 6))
+ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), altura_media), 
+  y = altura_media, ymin = altura_05, ymax = altura_95, color = num_cat)) + 
+  geom_pointrange() +
+  scale_color_brewer(palette = "Reds") +
+  scale_x_discrete("Conglomerados", labels = "") +
+  facet_wrap(~vegetacion_1) +
+  labs(title = "Altura Total (intervalos 90%)", color = "# árboles", 
+       size = "# árboles")
+```
+
+
+Repetimos las gráficas anteriores pero en esta ocasión nos centramos en la
+variable *diámetro del árbol*.
+
+```{r}
+ggplot(arbolado_congs) + 
+  geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
+               aes(x = long, y = lat, group = group)) + 
+  geom_point(aes(x = X, y = Y, color = diametro_cat, size = num_arboles),
+             alpha = 0.8) +
+  scale_color_brewer(palette = "YlOrRd") +
+  coord_fixed() +
+  xlim(-106, -101.5) +
+  ylim(18.6, 23.2) +
+  labs(title = "Diametro Normal (media en conglomerado)", color = "diámetro")
+```
+ 
+En la gráfica de cuantiles vemos un patrón similar al descrito en alturas.
+
+```{r, fig.width=8}
+ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media), 
+  y = diametro_media, ymin = diametro_05, ymax = diametro_95, color = num_cat)) + 
+  geom_pointrange() +
+  scale_color_brewer(palette = "Reds") +
+  scale_x_discrete("Conglomerados", labels = "") +
+  facet_wrap(~vegetacion_1) +
+  labs(title = "Diámetro Normal (intervalos 90%)", color = "# árboles")
+```
+
+
+### Muestreo
+
+Concentremonos en 6 conglomerados elegidos al azar:
+
+```{r}
+cong_ej <- filter(arbolado_tidy, IdConglomerado %in% 
+                    c(43644, 45946, 51249, 56723, 59480, 61016))
+cong_ej$altura_cat <- cut2(cong_ej$AlturaTotal, g = 6)
+
+ggplot(cong_ej) +
+  geom_point(color = "red", x = 0, y = 0, size = 3) +
+  geom_point(alpha = 0.6, aes(x = Distancia * cos(Azimut * pi / 180), 
+                              y = Distancia * sin(Azimut * pi / 180), 
+                              size = AlturaTotal)) +
+  facet_wrap(~IdConglomerado) +
+  labs(title = "Altura Total", size = "", x = "m", y = "m")
+```
+
+```{r}
+ggplot(cong_ej) +
+  geom_point(alpha = 0.6, aes(x = Distancia * cos(Azimut * pi / 180), 
+                              y = Distancia * sin(Azimut * pi / 180), 
+                              size = diametro_normal)) +
+  geom_point(color = "red", x = 0, y = 0, size = 3.5) +
+  facet_wrap(~IdConglomerado) +
+  labs(title = "Diámetro Normal", size = "", x = "m", y = "m")
+```
+
+Construímos la matriz de distancias para
+
+```{r}
+arbolado_xy <- arbolado_tidy %>% 
+  mutate(coord_x = Distancia * cos(Azimut * pi / 180), 
+         coord_y = Distancia * sin(Azimut * pi / 180)) %>%
+  select(IdConglomerado, coord_x, coord_y)
+
+arbolado_dist <- dlply(arbolado_xy, "IdConglomerado", 
+  function(df){
+    dist(t(rbind(df$coord_x, df$coord_y)))
+  })
+
+muestra <- functio
+```
+
+
