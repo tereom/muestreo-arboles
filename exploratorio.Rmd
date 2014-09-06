@@ -7,7 +7,7 @@ En este reporte hacemos una descripción de los datos de un censo de árboles en
 conglomerados de Aguascalientes, Colima, Nayarit y Jalisco.
 
 ```{r, message=FALSE, echo=FALSE, warning=FALSE}
-source("~/Dropbox/curso_ITAM/computo/codigo/tema_ggplot.R")
+source("src/tema_ggplot.R")
 library(plyr)
 library(dplyr)
 library(tidyr)
@@ -44,7 +44,7 @@ edo_df <- edo_shp %>%
 Veamos cómo se distribuyen los conglomerados de acuerdo al tipo de vegetación 
 primaria,
 
-```{r}
+```{r, fig.height=5, fig.width=5, fig.align='center'}
 bases <- list(conglomerado, conglomerado_bq, selva)
 names(bases) <- c("bpq_bqp", "bq", "selva")
 congs <- ldply(bases, rbind)
@@ -65,7 +65,7 @@ ggplot(data = congs) +
 
 Antes de proseguir realizamos algunas recodificaciones:
 
-```{r}
+```{r, fig.height=4, fig.width=4, fig.align='center'}
 arbolado_tidy <- arbolado %>%
   mutate(diametro_normal = mapvalues(DiametroNormal, 999, NA),
          diametro_copa = mapvalues(DiametroCopa, -9999, NA), 
@@ -107,7 +107,7 @@ arbolado_tidy$AlturaFusteLimpio[cambiar] <- arbolado_tidy$AlturaTotal[cambiar]
 
 Veamos algunos resúmenes de la base de datos de arbolado. 
 
-```{r}
+```{r, fig.height=5, fig.width=5, fig.align='center'}
 arbolado_resumen <- arbolado_tidy %>%
   group_by(IdConglomerado) %>%
   summarise(num_arboles = n(), 
@@ -125,10 +125,9 @@ arbolado_resumen <- arbolado_tidy %>%
          diametro_cat = cut2(diametro_media, g = 6)) %>%
   arrange(desc(num_arboles))
 
-arbolado_resumen
+arbolado_resumen[1:10, ]
 
-arbolado_congs <- join(arbolado_resumen, congs[, c("IdConglomerado", "X", "Y", 
-                                                   "con_Incendios")])
+arbolado_congs <- join(arbolado_resumen, congs[, c("IdConglomerado", "X", "Y")])
 
 ggplot(arbolado_congs) + 
   geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
@@ -153,7 +152,7 @@ lugares donde la media es mayor, esto es natural pues no hay lugares que
 tengan únicamente árboles muy altos pero si hay lugares con pocos árboles
 altos.
 
-```{r, fig.width=8}
+```{r, fig.height=5, fig.width=7, fig.align='center'}
 arbolado_congs <- arbolado_congs %>%
   mutate(num_cat = cut2(num_arboles, g = 6))
 ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), altura_media), 
@@ -162,15 +161,14 @@ ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), altura_media),
   scale_color_brewer(palette = "Reds") +
   scale_x_discrete("Conglomerados", labels = "") +
   facet_wrap(~vegetacion_1) +
-  labs(title = "Altura Total (intervalos 90%)", color = "# árboles", 
-       size = "# árboles")
+  labs(title = "Altura Total (intervalos 90%)", color = "# árboles")
 ```
 
 
 Repetimos las gráficas anteriores pero en esta ocasión nos centramos en la
 variable *diámetro del árbol*.
 
-```{r}
+```{r, fig.height=5, fig.width=5, fig.align='center'}
 ggplot(arbolado_congs) + 
   geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
                aes(x = long, y = lat, group = group)) + 
@@ -185,7 +183,7 @@ ggplot(arbolado_congs) +
  
 En la gráfica de cuantiles vemos un patrón similar al descrito en alturas.
 
-```{r, fig.width=8}
+```{r, fig.height=5, fig.width=7, fig.align='center'}
 ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media), 
   y = diametro_media, ymin = diametro_05, ymax = diametro_95, color = num_cat)) + 
   geom_pointrange() +
@@ -200,44 +198,149 @@ ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media),
 
 Concentremonos en 6 conglomerados elegidos al azar:
 
-```{r}
-cong_ej <- filter(arbolado_tidy, IdConglomerado %in% 
-                    c(43644, 45946, 51249, 56723, 59480, 61016))
+```{r, fig.height=8.5, fig.width=6, fig.align='center'}
+cong_ej <- filter(arbolado_tidy, IdConglomerado %in%
+                   c(43644, 45946, 51249, 56723, 59480, 61016))
 cong_ej$altura_cat <- cut2(cong_ej$AlturaTotal, g = 6)
 
 ggplot(cong_ej) +
-  geom_point(color = "red", x = 0, y = 0, size = 3) +
+  geom_point(color = "red", x = 0, y = 0, size = 2.5) +
   geom_point(alpha = 0.6, aes(x = Distancia * cos(Azimut * pi / 180), 
                               y = Distancia * sin(Azimut * pi / 180), 
                               size = AlturaTotal)) +
-  facet_wrap(~IdConglomerado) +
-  labs(title = "Altura Total", size = "", x = "m", y = "m")
+  facet_grid(IdConglomerado~Sitio) +
+  labs(title = "Altura Total (Sitio/Conglomerado)", size = "altura", 
+    x = "metros", y = "metros")
 ```
 
-```{r}
+```{r, fig.height=8.5, fig.width=6, fig.align='center'}
 ggplot(cong_ej) +
+  geom_point(color = "red", x = 0, y = 0, size = 2.5)  +
   geom_point(alpha = 0.6, aes(x = Distancia * cos(Azimut * pi / 180), 
                               y = Distancia * sin(Azimut * pi / 180), 
                               size = diametro_normal)) +
-  geom_point(color = "red", x = 0, y = 0, size = 3.5) +
-  facet_wrap(~IdConglomerado) +
-  labs(title = "Diámetro Normal", size = "", x = "m", y = "m")
+  facet_grid(IdConglomerado~Sitio) +
+  labs(title = "Altura Total (Sitio/Conglomerado)", size = "altura", 
+    x = "metros", y = "metros") +
+  coord_fixed()
+rm(arbolado, cong_ej, arbolado_resumen)
 ```
 
-Construímos la matriz de distancias para
+Primero añadimos las coordinadas que indican la ubicación de cada árbol, estas
+están en referencia al centro del sitio-cuadrante al que pertenecen,
 
 ```{r}
 arbolado_xy <- arbolado_tidy %>% 
   mutate(coord_x = Distancia * cos(Azimut * pi / 180), 
-         coord_y = Distancia * sin(Azimut * pi / 180)) %>%
-  select(IdConglomerado, coord_x, coord_y)
-
-arbolado_dist <- dlply(arbolado_xy, "IdConglomerado", 
-  function(df){
-    dist(t(rbind(df$coord_x, df$coord_y)))
-  })
-
-muestra <- functio
+         coord_y = Distancia * sin(Azimut * pi / 180),
+         cuadrante = 1 * (coord_x >= 0 & coord_y >= 0) +
+                     2 * (coord_x < 0 & coord_y >= 0) +
+                     3 * (coord_x < 0 & coord_y < 0) +
+                     4 * (coord_x >= 0 & coord_y < 0)) %>%
+  select(id = IdConglomerado, sitio = Sitio, altura = AlturaTotal, cuadrante, 
+    coord_x, coord_y)
 ```
 
+Supongamos que muestreamos un árbol de cada cuadrante, abordaremos dos 
+estrategias:
+
+1. Seleccionar el árbol más cercano al centro del sitio.  
+2. Seleccionar un árbol de manera aleatoria en cada cuadrante. Este método 
+puede no ser factible en práctica pero nos ayuda a entender las implicaciones 
+de elegir un método de muestreo determinado.
+
+```{r}
+selAzar <- function(x, n = 1){ # selecciona al azar una muestra de tamaño n
+  if(sum(is.na(x)) > 0){       # y devuelve la media de x en la muestra
+    NA
+  }
+  else{
+    sel <- sample(length(x), size = n)
+    mean(x[sel])
+  }
+}
+
+muestreo_1 <- arbolado_xy %>%
+  group_by(id, sitio, cuadrante) %>%
+  summarise(
+    altura_1 = altura[which.min(sqrt(coord_x ^ 2 + coord_y^2))],
+    altura_2 = selAzar(altura),  # seleccionar un árbol al azar
+    num_arboles = n()) %>%
+  ungroup() %>%
+  mutate(num_cat = cut2(num_arboles, g = 6)) 
+
+muestreo_1
+```
+
+En la tabla anterior num_arboles indica cuántos árboles había en el cuadrante 
+del que se tomó la muestra, altura_1 es la medición del árbol más cercano
+al centro del sitio y altura_2 la medición del árbol tomado aleatoriamente.
+
+Veamos como se comparan altura_1 y altura_2.
+
+```{r, fig.height=4, fig.width=5.5, fig.align='center'}
+ggplot(muestreo_1, aes(x = altura_1, y = altura_2, color = num_cat)) +
+  geom_abline(color = "black") +
+  geom_point(alpha = 0.8) +
+  labs(title = "Altura sitio-cuadrante (muestreo 1 árbol por cuadrante)", 
+    x = "árbol más cercano al centro",
+    y = "árbol elegido al azar", 
+    color = "# árboles \n en sitio") +
+  scale_color_brewer(palette = "Reds") 
+```
+
+
+En realidad nos interesa hacer mediciones a nivel conglomerado y no a nivel
+sitio,
+
+```{r, fig.height=4, fig.width=5.5, fig.align='center'}
+medias_1 <- muestreo_1 %>%
+  group_by(id) %>%
+  summarise(num_arboles = sum(num_arboles),
+    altura_1 = mean(altura_1), 
+    altura_2 = mean(altura_2)) %>%
+  ungroup() %>%
+  mutate(num_cat = cut2(num_arboles, g = 6))
+
+ggplot(medias_1, aes(x = altura_1, y = altura_2, color = num_cat)) +
+  geom_abline(color = "black") +
+  geom_point(alpha = 0.8) +
+  labs(title = "Altura promedio en conglomerado \n (muestreo 1 árbol por cuadrante)", 
+    x = "árbol más cercano al centro",
+    y = "árbol elegido al azar", 
+    color = "# árboles \n en sitio") +
+  scale_color_brewer(palette = "Reds") 
+```
+
+
+Podemos explorar la variación de la muestra aleatoria de un sólo árbol,
+
+```{r, fig.height=5, fig.width=7.5, fig.align='center'}
+aleatorio_1 <- function(n = 1){
+  muestreo_1 <- arbolado_xy %>%
+  group_by(id, sitio, cuadrante) %>%
+  summarise(altura_2 = selAzar(altura)) %>%  # seleccionar un árbol al azar
+  group_by(id) %>%
+  summarise(altura_2 = mean(altura_2)) 
+}
+
+rep_aleatorio <- rdply(100, aleatorio_1)
+
+se_aleatorio <- rep_aleatorio %>% 
+  group_by(id) %>%
+  summarise(altura_media = mean(altura_2), # promedio de las alturas
+    se_altura = sd(altura_2))
+
+aleatorio_g <- left_join(se_aleatorio, medias_1)
+
+ggplot(aleatorio_g, aes(x = reorder(1:nrow(aleatorio_g), altura_media), 
+  y = altura_media, ymin = altura_media - 2 * se_altura, 
+  ymax = altura_media + 2 * se_altura)) +
+  geom_pointrange(aes(color = num_cat)) +
+  geom_point(aes(y = altura_1), alpha = 0.8, size = 1.5) +
+  scale_color_brewer(palette = "Reds")  +
+  scale_x_discrete("Conglomerados", labels = "") +
+  labs(title = "Altura muestras aleatorias", color = "# árboles")
+  
+```
 
