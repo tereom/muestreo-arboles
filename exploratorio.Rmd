@@ -196,7 +196,7 @@ ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media),
 
 ### Muestreo
 
-Concentremonos en 6 conglomerados elegidos al azar:
+Concentrémonos en 6 conglomerados elegidos al azar:
 
 ```{r, fig.height=8.5, fig.width=6, fig.align='center'}
 cong_ej <- filter(arbolado_tidy, IdConglomerado %in%
@@ -223,7 +223,6 @@ ggplot(cong_ej) +
   labs(title = "Altura Total (Sitio/Conglomerado)", size = "altura", 
     x = "metros", y = "metros") +
   coord_fixed()
-rm(arbolado, cong_ej, arbolado_resumen)
 ```
 
 Primero añadimos las coordinadas que indican la ubicación de cada árbol, estas
@@ -315,7 +314,7 @@ ggplot(medias_1, aes(x = altura_1, y = altura_2, color = num_cat)) +
 
 Podemos explorar la variación de la muestra aleatoria de un sólo árbol,
 
-```{r, fig.height=5, fig.width=7.5, fig.align='center'}
+```{r, fig.height=5, fig.width=7.5, fig.align='center', cache=TRUE}
 aleatorio_1 <- function(n = 1){
   muestreo_1 <- arbolado_xy %>%
   group_by(id, sitio, cuadrante) %>%
@@ -324,23 +323,44 @@ aleatorio_1 <- function(n = 1){
   summarise(altura_2 = mean(altura_2)) 
 }
 
-rep_aleatorio <- rdply(100, aleatorio_1)
+rep_aleatorio <- rdply(1000, aleatorio_1)
 
 se_aleatorio <- rep_aleatorio %>% 
   group_by(id) %>%
   summarise(altura_media = mean(altura_2), # promedio de las alturas
-    se_altura = sd(altura_2))
+    altura_05 = quantile(altura_2, 0.05, na.rm = TRUE),
+    altura_95 = quantile(altura_2, 0.95, na.rm = TRUE)
+  )
 
 aleatorio_g <- left_join(se_aleatorio, medias_1)
 
 ggplot(aleatorio_g, aes(x = reorder(1:nrow(aleatorio_g), altura_media), 
-  y = altura_media, ymin = altura_media - 2 * se_altura, 
-  ymax = altura_media + 2 * se_altura)) +
+  y = altura_media, ymin = altura_05, 
+  ymax = altura_95)) +
   geom_pointrange(aes(color = num_cat)) +
   geom_point(aes(y = altura_1), alpha = 0.8, size = 1.5) +
   scale_color_brewer(palette = "Reds")  +
   scale_x_discrete("Conglomerados", labels = "") +
   labs(title = "Altura muestras aleatorias", color = "# árboles")
   
+```
+
+En la gráfica superior, los intervalos corresponden a los cuantiles obtenidos
+de muestrear seleccionando (al azar) un árbol en cada cuadrante de cada sitio. 
+Los puntos negros son las estimaciones de altura obtenidas si procedemos de 
+manera sistemática eligiendo, en cada cuadrantem el árbol más cercano al centro 
+del sitio. 
+
+```{r}
+aleatorio_congs_sum <- select(arbolado_resumen, id = IdConglomerado, 
+  altura_pob = altura_media)
+aleatorio_g2 <- left_join(aleatorio_g, aleatorio_congs_sum)
+ggplot(aleatorio_g2, aes(x = reorder(1:nrow(aleatorio_g), altura_media), 
+  y = altura_media, ymin = altura_05, ymax = altura_95)) +
+  geom_pointrange(aes(color = num_cat)) +
+  geom_point(aes(y = altura_pob), alpha = 0.8, size = 1.5) +
+  scale_color_brewer(palette = "Reds")  +
+  scale_x_discrete("Conglomerados", labels = "") +
+  labs(title = "Altura muestras aleatorias", color = "# árboles")
 ```
 
