@@ -62,7 +62,7 @@ ggplot(data = congs) +
 
 Antes de proseguir realizamos algunas recodificaciones:
 
-```{r, echo=FALSE, fig.height=4, fig.width=4, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=4, fig.width=4, fig.align='center',message=FALSE, warning=FALSE}
 arbolado_tidy <- arbolado %>%
   mutate(diametro_normal = mapvalues(DiametroNormal, 999, NA),
          diametro_copa = mapvalues(DiametroCopa, -9999, NA), 
@@ -149,7 +149,7 @@ lugares donde la media es mayor, esto es natural pues no hay lugares que
 tengan únicamente árboles muy altos pero si hay lugares con pocos árboles
 altos.
 
-```{r, echo=FALSE, fig.height=5, fig.width=7, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=5, fig.width=7, fig.align='center',message=FALSE,warning=FALSE}
 arbolado_congs <- arbolado_congs %>%
   mutate(num_cat = cut2(num_arboles, g = 6))
 ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), altura_media), 
@@ -165,7 +165,7 @@ ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), altura_media),
 Repetimos las gráficas anteriores pero en esta ocasión nos centramos en la
 variable *diámetro del árbol*.
 
-```{r, echo=FALSE, fig.height=5, fig.width=5, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=5, fig.width=5, fig.align='center',message=FALSE,warning=FALSE}
 ggplot(arbolado_congs) + 
   geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
                aes(x = long, y = lat, group = group)) + 
@@ -180,7 +180,7 @@ ggplot(arbolado_congs) +
  
 En la gráfica de cuantiles vemos un patrón similar al descrito en alturas.
 
-```{r, echo=FALSE, fig.height=5, fig.width=7, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=5, fig.width=7, fig.align='center',message=FALSE,warning=FALSE}
 ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media), 
   y = diametro_media, ymin = diametro_05, ymax = diametro_95, color = num_cat)) + 
   geom_pointrange() +
@@ -194,7 +194,7 @@ ggplot(arbolado_congs, aes(x = reorder(1:nrow(arbolado_congs), diametro_media),
 ### Muestreo
 Veamos como se distribuyen las variables a lo largo de todos los conglomerados,
 
-```{r, echo=FALSE, fig.height=4, fig.width=6, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=4, fig.width=6, fig.align='center',message=FALSE,warning=FALSE}
 arbolado_xy <- arbolado_tidy %>% 
   mutate(coord_x = Distancia * cos(Azimut * pi / 180), 
          coord_y = Distancia * sin(Azimut * pi / 180),
@@ -216,7 +216,7 @@ Notamos que la variable diámetro presenta fuerte sesgo hacia la izquierda.
 Concentrémonos en 6 conglomerados elegidos al azar, para entender como
 se ven las variables de interés:
 
-```{r, echo=FALSE, fig.height=8.5, fig.width=6, fig.align='center',message=FALSE}
+```{r, echo=FALSE, fig.height=8.5, fig.width=6, fig.align='center',message=FALSE,warning=FALSE}
 cong_ej <- filter(arbolado_tidy, IdConglomerado %in%
                    c(43644, 45946, 51249, 56723, 59480, 61016))
 cong_ej$altura_cat <- cut2(cong_ej$AlturaTotal, g = 6)
@@ -513,7 +513,7 @@ ponderar la medición de árbol más cercano de cada cuadrante por el número de
 árboles en el cuadrante, en esta ocasión no estamos hablando de probabilidad de selección pues en el muestreo sistemático no hay
 aleatoriedad en la selección de ningún árbol.
 
-```{r, echo = FALSE}
+```{r, echo = FALSE,message=FALSE}
 sistem_1 <- arbolado_xy %>%  
   group_by(id, sitio, cuadrante, variable) %>%
   summarise(
