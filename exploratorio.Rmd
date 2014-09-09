@@ -351,7 +351,10 @@ Los puntos negros son las estimaciones de altura obtenidas si procedemos de
 manera sistemática eligiendo, en cada cuadrantem el árbol más cercano al centro 
 del sitio. 
 
-```{r}
+Ahora comparamos con las verdaderas medias, recordemos que son intervalos de
+90% por lo que esperamos que el 10% se sitúen fuera del intervalo.
+
+```{r, fig.height=5, fig.width=7.5, fig.align='center', cache=TRUE}
 aleatorio_congs_sum <- select(arbolado_resumen, id = IdConglomerado, 
   altura_pob = altura_media)
 aleatorio_g2 <- left_join(aleatorio_g, aleatorio_congs_sum)
