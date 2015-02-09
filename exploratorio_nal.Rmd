@@ -1,0 +1,237 @@
+---
+title: "Muestreo nacional"
+output: html_document
+---
+
+
+Base de datos de entrada INFyS\_2009\_2013, tablas Arbolado\_2009\_2013 y 
+_Conglomerados_.
+
+```{r, echo=FALSE, warning=FALSE}
+options(digits = 2)
+source("src/tema_ggplot.R")
+library(ggplot2)
+library(plyr)
+library(tidyr)
+library(dplyr)
+
+library(rgdal)
+library(maptools)
+
+library(gridExtra)
+
+library(Hmisc)
+library(data.table)
+
+
+arbolado <- read.csv("datos/bases_infys_2009_2013/Arbolado_2009_2013_mac.txt", 
+  stringsAsFactors=FALSE, na.strings = c("-9999", "n/a", "NULL", "NA", "N/A"))
+
+# Recodificar NAs
+arbolado[arbolado == -9999] <- NA
+arbolado[arbolado == 999] <- NA
+
+glimpse(arbolado)
+
+conglomerados <- read.csv("datos/bases_infys_2009_2013/Conglomerados_mac.txt", 
+  stringsAsFactors=FALSE, na.strings = c("-9999", "n/a", "NULL", "NA", "N/A"))
+conglomerados$Cgl <- as.character(conglomerados$Conglomerado)
+
+## Clasificación de vegetación
+clasif_veg <- read.csv("datos/Clasificacion_serie_V.csv", 
+                       stringsAsFactors = FALSE)
+
+clasif_veg <- clasif_veg %>% 
+  select(formacion = FORMACIÓN, Veg_prim_levantad = CLAVE.SERIE.V )
+
+conglomerados <- inner_join(conglomerados, clasif_veg)
+
+# agregamos la información de la base de datos de arbolado a nivel cgl. en 
+# particular nos interesan las variables altura y diámetro
+
+arbolado_cgl <- arbolado %>%
+  group_by(Cgl) %>%
+  summarise(
+    num_arboles = n(),
+    altura_media = mean(AlturaTotal, na.rm = TRUE),
+    altura_sd = sd(AlturaTotal, na.rm = TRUE),
+    altura_05 = quantile(AlturaTotal, 0.05, na.rm = TRUE),
+    altura_95 = quantile(AlturaTotal, 0.95, na.rm = TRUE),
+    diametro_media = mean(DiametroNormal, na.rm = TRUE),
+    diametro_sd = sd(DiametroNormal, na.rm = TRUE), 
+    diametro_05 = quantile(DiametroNormal, 0.05, na.rm = TRUE),
+    diametro_95 = quantile(DiametroNormal, 0.95, na.rm = TRUE)
+    ) %>%
+  mutate(
+    num_cat = cut2(num_arboles, g = 6))
+
+# unimos con la base de datos de conglomerado
+cgls <- filter(arbolado_cgl, complete.cases(arbolado_cgl)) %>%
+  inner_join(conglomerados, by = c("Cgl" = "Cgl"))
+```
+
+Veamos cómo se distribuyen los conglomerados de acuerdo al tipo de vegetación 
+primaria levantada
+
+```{r, echo=FALSE, echo=FALSE, message=FALSE, warnings=FALSE}
+edo_shp <- readOGR("datos/estados", layer = "Mex_Edos")
+edo_shp@data$id <- rownames(edo_shp@data)
+edo_df <- edo_shp %>%
+  fortify(region = "id") %>%
+  mutate(id = as.numeric(id)) # hacemos el id numérica
+```
+
+```{r, cache=TRUE, fig.width=11, fig.height=7}
+edo_shp <- readOGR("datos/estados", layer = "Mex_Edos")
+edo_shp@data$id <- rownames(edo_shp@data)
+edo_df <- edo_shp %>%
+  fortify(region = "id") %>%
+  mutate(id = as.numeric(id)) # hacemos el id numérica
+
+ggplot(data = filter(cgls, !(formacion %in% c("ÁREAS NO FORESTALES", "OTRAS ASOCIACIONES")))) + 
+  geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
+               aes(x = long, y = lat, group = group)) + 
+  geom_point(aes(x = X, y = Y, color = formacion, 
+                 size = Arboles_x_cgl), alpha = 0.7) +
+  # facet_wrap(~.id) +
+  coord_fixed() +
+  labs(title = "Vegetación primaria levantada", color = "Tipo", 
+       size = "# árboles")
+```
+
+### Altura Total y Diámetro Normal
+Las principales variables de interés son _Altura Total_ y _Diámetro Normal_. A
+continuación mostramos los histogramas correspondientes.
+
+```{r, fig.height=4, fig.width = 8}
+hist_altura <- ggplot(arbolado, aes(x = log(AlturaTotal))) + 
+  geom_histogram(aes(y = ..density..), binwidth = 0.2) +
+  scale_x_continuous("log (cm)", labels = exp, 
+    breaks = log(sapply(-2:6, function(i) 2 ^ i)), limits = c(-2.5, 5)) +
+  labs(y = "", title = "Altura Total")
+
+hist_diametro <- ggplot(arbolado, aes(x = log(DiametroNormal))) + 
+  geom_histogram(aes(y = ..density..), binwidth = 0.09) +
+  scale_x_continuous("log (m)", labels = exp, 
+    breaks = log(sapply(3:8, function(i) 2 ^ i)), limits = c(1.5, 6)) +
+  labs(y = "", title = "Diámetro Normal")
+
+grid.arrange(hist_altura, hist_diametro, nrow = 1)
+```
+
+Veamos como varían las variables por formación.
+```{r}
+# Resúmenes a nivel formación
+cgls %>%
+  group_by(formacion) %>%
+  summarise(
+    num_cgls = n(),
+    num_media = mean(num_arboles),
+    num_min = min(num_arboles),
+    num_max = max(num_arboles),
+    altura_med = mean(altura_media),
+    altura_sd = sd(altura_media),
+    diametro_med = mean(diametro_media),
+    diametro_sd = sd(diametro_media)
+    ) %>%
+  arrange(altura_med)
+```
+
+Ahora graficamos las medias de la variable _Altura Total_ por 
+conglomerado, y los intervalos correspondientes a los cuantiles 5% a 95%. 
+Vale la pena notar que la longitud de los intervalos no se debe únicamente a 
+tamaño de muestra sino también nos habla de _variabilidad_ en las alturas dentro
+de un conglomerado. Más aún, los lugares con mayor variabilidad corresponden a 
+los lugares donde la media es mayor, esto es natural pues no hay lugares que 
+tengan únicamente árboles muy altos pero si hay lugares con pocos árboles
+altos.
+
+```{r, fig.width=9, fig.height=6}
+# Resumenes a nivel conglomerado
+ggplot(cgls, aes(x = reorder(1:nrow(cgls), altura_media), 
+                 y = altura_media, ymin = altura_05, ymax = altura_95, 
+                 color = num_cat)) + 
+  geom_pointrange() +
+  scale_color_brewer(palette = "Reds") +
+  scale_x_discrete("Conglomerados", labels = "") +
+  facet_wrap(~ formacion) +
+  labs(title = "Altura Total (intervalos 90%)", color = "# árboles", 
+       y = "Media")
+```
+
+Repetimos las gráficas anteriores pero en esta ocasión nos centramos en la
+variable _Diámetro Normal_.
+
+```{r, fig.width=9, fig.height=6}
+ggplot(cgls, aes(x = reorder(1:nrow(cgls), diametro_media), 
+                 y = diametro_media, ymin = diametro_05, ymax = diametro_95, 
+                 color = num_cat)) + 
+  geom_pointrange() +
+  scale_color_brewer(palette = "Reds") +
+  scale_x_discrete("Conglomerados", labels = "") +
+  facet_wrap(~ formacion) +
+  labs(title = "Diametro Normal (intervalos 90%)", color = "# árboles", 
+       y = "Media")
+
+```
+
+En las gráficas anteriores notamos la importancia del número de árboles 
+muestreados, por tanto analizamos la variación de esta variable a lo largo 
+de las distintas formaciones.
+
+```{r}
+ggplot(filter(cgls, !is.na(formacion)), 
+       aes(x = reorder(formacion, num_arboles, FUN = median), y = num_arboles)) +
+  geom_boxplot() +
+  labs(x = "", title = "Vegetación primaria levantada", y = "# árboles") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+Red Bayesiana
+
+```{r, cache=TRUE, fig.width=12, fig.height=12}
+set.seed(5454)
+library(bnlearn)
+
+cgls_red <- cgls %>%
+  filter(num_arboles > 10) %>%
+  select(num_arboles, altura_media, diametro_media, altitud = Altitud, 
+         pendiente = Pendiente, formacion, tipo = Tipo_cgl, tenencia = Tenencia, 
+         fisiografia = Fisiografia)
+
+cgls_red_2 <- filter(cgls_red, complete.cases(cgls_red)) %>%
+  mutate_each(funs(cut2(., g = 6, levels.mean = T)), num_arboles:pendiente) %>%
+  mutate_each(funs(factor), formacion:fisiografia)
+
+cgls_red_2 <- data.frame(cgls_red_2)
+red_aic <- hc(x = cgls_red_2, score = "aic", restart = 25)
+graphviz.plot(red_aic)
+
+
+red_mle <- bn.fit(red_aic, data = cgls_red_2, method = 'bayes', iss = 100)
+```
+
+### Modelo jerárquico para Altura Total
+
+```{r}
+set.seed(56454)
+
+cgls_mj <- cgls %>%
+  sample_n(5000) %>%
+  filter(num_arboles > 10) %>%
+  select(num_arboles, altura_media, diametro_media, altitud = Altitud, 
+         pendiente = Pendiente, formacion, tipo = Tipo_cgl, tenencia = Tenencia, 
+         fisiografia = Fisiografia) %>%
+  mutate(pendiente = cut2(pendiente, g = 6, levels.mean = T))
+
+model.matrix(~ -1 + pendiente + num_arboles + fisiografia)
+model{
+  for(i in 1:num_clusters){
+    mu.0[i] <- alpha + a.form*formacion[formacion[i]] + a.pend*pendiente[i] + 
+      a.altitud*altitud[i] + a.num*num_arboles[i] + a.fisio*fisografia[i]
+    mu.1[i] ~ dnorm(mu.0[i], tau.mu)
+    y[i] ~ dnorm(mu.1[i], tau.p*num_arboles[i])
+  }
+}
+```
+

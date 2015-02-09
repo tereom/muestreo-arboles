@@ -1,0 +1,56 @@
+---
+title: "Muestreo nacional"
+output: html_document
+---
+
+
+Base de datos de entrada INFyS\_2009\_2013, tabla Arbolado\_2009\_2013
+```{r}
+source("src/tema_ggplot.R")
+library(ggplot2)
+library(plyr)
+library(tidyr)
+library(dplyr)
+
+library(rgdal)
+library(maptools)
+
+library(Hmisc)
+
+
+arbolado <- read.table("datos/bases_infys_2009_2013/Arbolado_2009_2013.txt", 
+                       header=TRUE, quote="\"")
+
+arbolado <- tbl_df(arbolado)
+arbolado
+
+
+```
+
+Resumen a nivel conglomerado
+
+```{r}
+arbolado %>%
+  group_by(Conglomerado) %>%
+  
+```
+
+
+```{r, echo=FALSE, echo=FALSE, message=FALSE, warnings=FALSE}
+edo_shp <- readOGR("datos/estados", layer = "Mex_Edos")
+edo_shp@data$id <- rownames(edo_shp@data)
+edo_df <- edo_shp %>%
+  fortify(region = "id") %>%
+  mutate(id = as.numeric(id)) # hacemos el id numérica
+
+ggplot(data = arbolado) + 
+  geom_polygon(data = edo_df, colour='darkgray', fill = "darkgray", alpha = 0.4,
+               aes(x = long, y = lat, group = group)) + 
+  geom_point(aes(x = X, y = Y, color = Veg_prim_levantada), alpha = 0.7) +
+  # facet_wrap(~.id) +
+  coord_fixed() +
+  xlim(-106, -101.5) +
+  ylim(18.6, 23.2) +
+  labs(title = "Vegetación primaria levantada", color = "Tipo", 
+       size = "# árboles")
+```
