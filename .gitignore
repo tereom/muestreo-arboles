@@ -1,7 +1,7 @@
 .Rproj.user
 .Rhistory
 .RData
-.html
+*.html
 exploratorio_escondido_cache
 exploratorio_escondido_files
 exploratorio_nal_files
